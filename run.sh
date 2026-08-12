@@ -1,11 +1,15 @@
 #!/bin/bash
-# unitrace \
-#   --chrome-kernel-logging \
-#   --start-paused \
-#   --output-dir-path artifacts/molmoact2 \
-#   python collect_model.py
+
+DEVICE_TYPE=$1
+DEVICE_NAME=$2
+
+python collect_model.py \
+  --device "$DEVICE_TYPE" \
+  --output-dir "artifacts/molmoact2/$DEVICE_NAME" \
+  --hardware-label "A100 BF16" \
+  --peak-tflops 260 \
+  --memory-bandwidth-gbs 1555
 
 python -m perf_analysis \
-  artifacts/molmoact2/collection.json \
-  --output-dir artifacts/molmoact2 --allow-profiler-fallback \
-  --unitrace artifacts/molmoact2/python.1119469.json
+  artifacts/molmoact2/"$DEVICE_NAME"/collection.json \
+  --output-dir artifacts/molmoact2/"$DEVICE_NAME"
