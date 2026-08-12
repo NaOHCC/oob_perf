@@ -1,0 +1,67 @@
+# Copyright (C) 2026 Intel Corporation
+# SPDX-License-Identifier: Apache-2.0
+
+"""Compare two completed callable performance analyses offline."""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from perf_analysis.comparison import compare_analyses, ComparisonError, load_analysis
+from perf_analysis.reporting import (
+    render_comparison_text,
+    write_comparison_json,
+    write_comparison_markdown,
+)
+
+
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("reference", type=Path, help="Reference analysis.json")
+    parser.add_argument("target", type=Path, help="Target analysis.json")
+    parser.add_argument("--reference-name", help="Reference display name")
+    parser.add_argument("--target-name", help="Target display name")
+    parser.add_argument(
+        "--top-operations",
+        type=int,
+        default=20,
+        help="Number of operator gaps in terminal and Markdown output",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=Path(),
+        help="Directory for comparison.json and comparison.md",
+    )
+    return parser
+
+
+def main() -> None:
+    """Run the offline cross-device comparison phase."""
+    parser = _parser()
+    args = parser.parse_args()
+    if args.top_operations <= 0:
+        parser.error("--top-operations must be greater than zero")
+    try:
+        result = compare_analyses(
+            load_analysis(args.reference),
+            load_analysis(args.target),
+            reference_name=args.reference_name,
+            target_name=args.target_name,
+        )
+    except ComparisonError as error:
+        parser.error(str(error))
+    write_comparison_json(result, args.output_dir / "comparison.json")
+    write_comparison_markdown(
+        result,
+        args.output_dir / "comparison.md",
+        top_operations=args.top_operations,
+    )
+    print(  # noqa: T201
+        render_comparison_text(result, top_operations=args.top_operations),
+    )
+
+
+if __name__ == "__main__":
+    main()
