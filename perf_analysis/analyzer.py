@@ -10,18 +10,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from perf_analysis.models import (
+    SCHEMA_VERSION,
     ActualSource,
     AnalysisResult,
     CollectionArtifacts,
     OperatorAnalysis,
-    SCHEMA_VERSION,
 )
 from perf_analysis.traces import (
     ActualOp,
+    TraceAnalysisError,
     normalize_op_name,
     parse_profiler_ops,
     parse_unitrace_ops,
-    TraceAnalysisError,
 )
 
 _VECTOR_ENGINE_OPS = frozenset(

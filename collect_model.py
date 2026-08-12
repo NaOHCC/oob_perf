@@ -7,7 +7,7 @@ import argparse
 from pathlib import Path
 
 import torch
-from perf_analysis import collect_callable, CollectionConfig, HardwareSpec
+from perf_analysis import CollectionConfig, HardwareSpec, collect_callable
 from physicalai.data import Feature, FeatureType, Observation
 from physicalai.policies import MolmoAct2
 

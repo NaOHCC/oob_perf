@@ -4,8 +4,13 @@
 """Analyze one repeatable callable without the benchmark repository."""
 
 from perf_analysis.analyzer import analyze_collection, load_collection
-from perf_analysis.collector import collect_callable, CollectionError
-from perf_analysis.comparison import compare_analyses, ComparisonError, load_analysis
+from perf_analysis.collector import CollectionError, collect_callable
+from perf_analysis.comparison import (
+    ComparisonError,
+    compare_analyses,
+    load_analysis,
+    load_reference,
+)
 from perf_analysis.metrics import MetricCount, OpInvocation, OpMetrics
 from perf_analysis.models import (
     AnalysisResult,
@@ -30,10 +35,10 @@ from perf_analysis.reporting import (
 )
 from perf_analysis.traces import (
     ActualOp,
+    TraceAnalysisError,
     normalize_op_name,
     parse_profiler_ops,
     parse_unitrace_ops,
-    TraceAnalysisError,
 )
 
 __all__ = [
@@ -58,6 +63,7 @@ __all__ = [
     "compare_analyses",
     "load_analysis",
     "load_collection",
+    "load_reference",
     "normalize_op_name",
     "parse_profiler_ops",
     "parse_unitrace_ops",

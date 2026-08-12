@@ -11,7 +11,6 @@ import pytest
 import torch
 
 from test.perf_analysis import (
-    analyze_collection,
     CollectionArtifacts,
     CollectionConfig,
     HardwareSpec,
@@ -19,6 +18,7 @@ from test.perf_analysis import (
     LatencyStats,
     MetricCount,
     TraceAnalysisError,
+    analyze_collection,
 )
 
 

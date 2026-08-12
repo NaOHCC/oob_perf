@@ -11,10 +11,10 @@ import pytest
 
 from test.perf_analysis import (
     AnalysisResult,
-    compare_analyses,
     HardwareSpec,
     LatencyStats,
     OperatorAnalysis,
+    compare_analyses,
     render_comparison_markdown,
     render_comparison_text,
     render_markdown,

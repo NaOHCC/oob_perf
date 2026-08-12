@@ -8,13 +8,16 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING
 
+from perf_analysis.analyzer import analyze_collection
 from perf_analysis.models import (
+    SCHEMA_VERSION,
     AnalysisResult,
+    CollectionArtifacts,
     ComparisonResult,
     OperatorAnalysis,
     OperatorComparison,
-    SCHEMA_VERSION,
 )
+from perf_analysis.traces import TraceAnalysisError
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -54,6 +57,64 @@ def load_analysis(path: Path) -> AnalysisResult:
     except (KeyError, TypeError, ValueError) as error:
         msg = f"invalid analysis report: {path}"
         raise ComparisonError(msg) from error
+
+
+def load_reference(
+    path: Path,
+    *,
+    unitrace_path: Path | None = None,
+    allow_profiler_fallback: bool = False,
+) -> AnalysisResult:
+    """Load an analysis or analyze an XPU unitrace collection.
+
+    Args:
+        path: Reference ``analysis.json`` or XPU ``collection.json``.
+        unitrace_path: Explicit unitrace trace for a collection reference.
+        allow_profiler_fallback: Fall back when strict unitrace analysis fails.
+
+    Returns:
+        The completed reference analysis.
+
+    Raises:
+        ComparisonError: If the reference is invalid or cannot use unitrace.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        msg = f"invalid reference report: {path}"
+        raise ComparisonError(msg) from error
+    if not isinstance(data, dict):
+        msg = f"reference JSON must contain an object: {path}"
+        raise ComparisonError(msg)
+    if "actual_source" in data:
+        if unitrace_path is not None or allow_profiler_fallback:
+            msg = "unitrace reference options require a collection.json reference"
+            raise ComparisonError(msg)
+        try:
+            return AnalysisResult.from_dict(data)
+        except (KeyError, TypeError, ValueError) as error:
+            msg = f"invalid analysis report: {path}"
+            raise ComparisonError(msg) from error
+
+    try:
+        collection = CollectionArtifacts.from_dict(data)
+    except (KeyError, TypeError, ValueError) as error:
+        msg = f"invalid collection manifest: {path}"
+        raise ComparisonError(msg) from error
+    if collection.device != "xpu":
+        msg = f"collection reference must use XPU, got {collection.device!r}"
+        raise ComparisonError(msg)
+    if collection.actual_source_preference == "profiler":
+        msg = "XPU collection was captured in profiler-only mode; collect again with --unitrace"
+        raise ComparisonError(msg)
+    try:
+        return analyze_collection(
+            collection,
+            unitrace_path=unitrace_path,
+            allow_profiler_fallback=allow_profiler_fallback,
+        )
+    except TraceAnalysisError as error:
+        raise ComparisonError(str(error)) from error
 
 
 def _bound(operator: OperatorAnalysis) -> str:

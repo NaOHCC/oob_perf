@@ -6,9 +6,15 @@
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from perf_analysis.comparison import compare_analyses, ComparisonError, load_analysis
+from perf_analysis.comparison import (
+    ComparisonError,
+    compare_analyses,
+    load_analysis,
+    load_reference,
+)
 from perf_analysis.reporting import (
     render_comparison_text,
     write_comparison_json,
@@ -18,8 +24,22 @@ from perf_analysis.reporting import (
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("reference", type=Path, help="Reference analysis.json")
+    parser.add_argument(
+        "reference",
+        type=Path,
+        help="Reference XPU analysis.json or collection.json",
+    )
     parser.add_argument("target", type=Path, help="Target analysis.json")
+    parser.add_argument(
+        "--reference-unitrace",
+        type=Path,
+        help="Explicit unitrace JSON for an XPU collection reference",
+    )
+    parser.add_argument(
+        "--allow-reference-profiler-fallback",
+        action="store_true",
+        help="Use XPU profiler durations when reference unitrace analysis fails",
+    )
     parser.add_argument("--reference-name", help="Reference display name")
     parser.add_argument("--target-name", help="Target display name")
     parser.add_argument(
@@ -45,7 +65,11 @@ def main() -> None:
         parser.error("--top-operations must be greater than zero")
     try:
         result = compare_analyses(
-            load_analysis(args.reference),
+            load_reference(
+                args.reference,
+                unitrace_path=args.reference_unitrace,
+                allow_profiler_fallback=args.allow_reference_profiler_fallback,
+            ),
             load_analysis(args.target),
             reference_name=args.reference_name,
             target_name=args.target_name,
@@ -58,8 +82,8 @@ def main() -> None:
         args.output_dir / "comparison.md",
         top_operations=args.top_operations,
     )
-    print(  # noqa: T201
-        render_comparison_text(result, top_operations=args.top_operations),
+    sys.stdout.write(
+        render_comparison_text(result, top_operations=args.top_operations) + "\n",
     )
 
 

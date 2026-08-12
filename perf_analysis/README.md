@@ -162,16 +162,41 @@ PYTHONPATH=test uv run --project library python -m perf_analysis \
   --output-dir test/artifacts/molmoact2/a100
 ```
 
-Copy only the two `analysis.json` files to one machine and compare them:
+To use XPU unitrace data directly during comparison, keep the XPU
+`collection.json`, profiler trace, and unitrace trace together. Copy the A100
+`analysis.json` to that machine, then pass the XPU collection as the reference:
 
 ```bash
 PYTHONPATH=test uv run --project library python -m perf_analysis.compare \
-  test/artifacts/molmoact2/xpu/analysis.json \
+  test/artifacts/molmoact2/xpu/collection.json \
   test/artifacts/molmoact2/a100/analysis.json \
+  --reference-unitrace test/artifacts/molmoact2/xpu/python.<pid>.json \
   --reference-name XPU \
   --target-name A100 \
   --output-dir test/artifacts/molmoact2/comparison
 ```
+
+Omit `--reference-unitrace` to discover the trace through the collection
+manifest's glob. Exactly one matching unitrace JSON must exist. Unitrace
+mapping is strict by default; use `--allow-reference-profiler-fallback` only
+when an explicitly reported XPU profiler fallback is acceptable. An XPU
+collection captured without `--unitrace` cannot be retrofitted with a unitrace
+trace because the collection interval was not aligned under the unitrace
+contract.
+
+The helper script exposes the same workflow:
+
+```bash
+cd test
+
+./run.sh collect xpu ptl "PTL BF16" 58 110 --unitrace
+./run.sh collect cuda a100 "A100 BF16" "$A100_PEAK_TFLOPS" "$A100_BANDWIDTH_GBS"
+./run.sh compare ptl a100 artifacts/molmoact2/ptl/python.<pid>.json
+```
+
+Set `UNITRACE_BIN` when unitrace is not available at the script's default
+workspace location. The compare command can omit its final path to use manifest
+discovery.
 
 The primary result is target wall speedup:
 

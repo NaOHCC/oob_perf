@@ -8,7 +8,7 @@ from pathlib import Path
 
 import torch
 
-from test.perf_analysis import collect_callable, CollectionConfig, HardwareSpec
+from test.perf_analysis import CollectionConfig, HardwareSpec, collect_callable
 
 
 def test_cpu_callable_writes_profiler_and_manifest(tmp_path: Path) -> None:

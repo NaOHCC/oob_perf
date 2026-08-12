@@ -15,12 +15,12 @@ from typing import TYPE_CHECKING
 import torch
 from perf_analysis.metrics import MetricCount
 from perf_analysis.models import (
+    SCHEMA_VERSION,
     CollectionArtifacts,
     CollectionConfig,
     HardwareSpec,
     InvocationMetrics,
     LatencyStats,
-    SCHEMA_VERSION,
 )
 
 if TYPE_CHECKING:
