@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -25,6 +25,9 @@ class ActualOp:
     name: str
     raw_name: str
     gpu_duration_us: float
+    timestamp_us: float
+    external_id: int | None
+    source_index: int
     input_dims: str
     input_strides: str
 
@@ -266,6 +269,9 @@ def _attribute_times(
             name=normalize_op_name(operation.raw_name),
             raw_name=operation.raw_name,
             gpu_duration_us=durations[index],
+            timestamp_us=operation.timestamp,
+            external_id=operation.external_id,
+            source_index=index,
             input_dims=operation.input_dims,
             input_strides=operation.input_strides,
         )

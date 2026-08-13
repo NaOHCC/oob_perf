@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Performance Trace Ledger</title>
+    <link rel="stylesheet" href="/assets/styles.css">
+</head>
+
+<body>
+    <header class="masthead">
+        <div class="masthead-inner">
+            <p class="eyebrow">Callable performance analysis</p>
+            <h1>Performance Trace Ledger</h1>
+            <p id="workload-context" class="context">Loading artifact data...</p>
+        </div>
+    </header>
+    <main class="workspace">
+        <section class="summary-grid" aria-label="Workload summary">
+            <article class="metric"><span>T1 projection</span><strong id="t1">-</strong></article>
+            <article class="metric"><span>T2 wall median</span><strong id="t2-wall">-</strong></article>
+            <article class="metric"><span>Mapped device sum</span><strong id="t2-device">-</strong></article>
+            <article class="metric"><span>End-to-end R</span><strong id="efficiency">-</strong></article>
+        </section>
+        <section class="analysis-layout">
+            <aside class="operator-pane" aria-labelledby="operators-heading">
+                <div class="pane-heading">
+                    <div>
+                        <p class="eyebrow">Operators</p>
+                        <h2 id="operators-heading">Measured workload</h2>
+                    </div>
+                    <label class="search-label" for="operator-search">Search</label>
+                    <input id="operator-search" type="search" autocomplete="off" placeholder="aten::addmm">
+                </div>
+                <div class="operator-table-wrap">
+                    <table class="operator-table">
+                        <thead>
+                            <tr>
+                                <th>Operator</th>
+                                <th><button class="sort-button" data-operator-sort="actual_ms">Actual</button></th>
+                                <th><button class="sort-button" data-operator-sort="projected_ms">T1</button></th>
+                                <th><button class="sort-button" data-operator-sort="efficiency">R</button></th>
+                            </tr>
+                        </thead>
+                        <tbody id="operator-rows"></tbody>
+                    </table>
+                </div>
+            </aside>
+            <section class="calls-pane" aria-labelledby="selected-operator">
+                <div class="selected-heading">
+                    <div>
+                        <p class="eyebrow">Per-call trace</p>
+                        <h2 id="selected-operator">Loading...</h2>
+                        <p id="pairing-note" class="muted"></p>
+                    </div>
+                    <div class="coverage" id="coverage"></div>
+                </div>
+                <section class="operator-metrics" aria-label="Selected operator metrics">
+                    <article class="metric compact"><span>T1</span><strong id="operator-t1">-</strong></article>
+                    <article class="metric compact"><span>Actual</span><strong id="operator-actual">-</strong></article>
+                    <article class="metric compact"><span>R</span><strong id="operator-efficiency">-</strong></article>
+                    <article class="metric compact"><span>Calls</span><strong id="operator-calls">-</strong></article>
+                </section>
+                <div class="call-controls">
+                    <label for="status-filter">Rows</label>
+                    <select id="status-filter">
+                        <option value="all">All call states</option>
+                        <option value="sequence-paired">Paired only</option>
+                        <option value="actual-only">Actual only</option>
+                        <option value="projected-only">Projected only</option>
+                    </select>
+                    <span id="call-count" class="muted"></span>
+                    <div class="pager">
+                        <button id="previous-page" class="icon-button" type="button" aria-label="Previous page"
+                            title="Previous page">&larr;</button>
+                        <button id="next-page" class="icon-button" type="button" aria-label="Next page"
+                            title="Next page">&rarr;</button>
+                    </div>
+                </div>
+                <div class="calls-table-wrap">
+                    <table class="calls-table">
+                        <thead>
+                            <tr>
+                                <th><button class="sort-button" data-call-sort="order">Order</button></th>
+                                <th>State</th>
+                                <th><button class="sort-button" data-call-sort="actual_ms">Actual</button></th>
+                                <th><button class="sort-button" data-call-sort="projected_ms">T1</button></th>
+                                <th><button class="sort-button" data-call-sort="efficiency">R</button></th>
+                                <th><button class="sort-button" data-call-sort="flops">FLOPs</button></th>
+                                <th><button class="sort-button" data-call-sort="memory_bytes">Bytes</button></th>
+                                <th><button class="sort-button" data-call-sort="timestamp_us">Trace time</button></th>
+                            </tr>
+                        </thead>
+                        <tbody id="call-rows"></tbody>
+                    </table>
+                </div>
+            </section>
+        </section>
+        <section id="diagnostics" class="diagnostics" hidden>
+            <p class="eyebrow">Diagnostics</p>
+            <ul id="diagnostic-list"></ul>
+        </section>
+    </main>
+    <script src="/assets/app.js"></script>
+</body>
+
+</html>

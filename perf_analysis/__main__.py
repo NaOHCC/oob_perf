@@ -8,8 +8,13 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from perf_analysis.analyzer import analyze_collection
-from perf_analysis.reporting import render_text, write_json, write_markdown
+from perf_analysis.analyzer import analyze_collection_artifacts
+from perf_analysis.reporting import (
+    render_text,
+    write_calls_json,
+    write_json,
+    write_markdown,
+)
 from perf_analysis.traces import TraceAnalysisError
 
 
@@ -36,7 +41,7 @@ def main() -> None:
     parser = _parser()
     args = parser.parse_args()
     try:
-        result = analyze_collection(
+        result, calls = analyze_collection_artifacts(
             args.collection,
             unitrace_path=args.unitrace,
             allow_profiler_fallback=args.allow_profiler_fallback,
@@ -45,6 +50,7 @@ def main() -> None:
         parser.error(str(error))
     write_json(result, args.output_dir / "analysis.json")
     write_markdown(result, args.output_dir / "analysis.md")
+    write_calls_json(calls, args.output_dir / "calls.json")
     print(render_text(result))  # noqa: T201
 
 

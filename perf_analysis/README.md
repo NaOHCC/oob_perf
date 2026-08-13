@@ -66,8 +66,9 @@ PYTHONPATH=test uv run --project library python -m perf_analysis \
   --output-dir artifacts/linear-fp16
 ```
 
-This writes `analysis.json` and `analysis.md` and prints a terminal summary.
-Python callers can use `analyze_collection(...)`, `render_text(...)`, and
+This writes `analysis.json`, `analysis.md`, and `calls.json`, then prints a
+terminal summary. Python callers can use `analyze_collection(...)`,
+`analyze_collection_artifacts(...)`, `render_text(...)`, and
 `render_markdown(...)` directly.
 
 Strict unitrace mapping is the default. To inspect profiler-only results when
@@ -78,6 +79,38 @@ PYTHONPATH=test uv run --project library python -m perf_analysis \
   artifacts/linear-fp16/collection.json \
   --allow-profiler-fallback
 ```
+
+## Per-Operator Viewer
+
+`calls.json` is a browser-oriented artifact containing one record for every
+projected MetricCount invocation and every trace-attributed operation. Start
+the local viewer after reporting completes:
+
+```bash
+PYTHONPATH=test uv run --project library python -m perf_analysis.viewer \
+  --artifact-dir artifacts/linear-fp16 \
+  --port 8000
+```
+
+Open `http://127.0.0.1:8000`. The server binds only to localhost and serves
+only its built-in static resources plus the already loaded `analysis.json` and
+`calls.json` from the selected artifact directory.
+
+The viewer starts with the operator having the greatest aggregate actual time.
+It supports operator search, aggregate sorting, call status filtering,
+server-side sorting, paging, and shape/stride expansion. Per-call records use
+the following states:
+
+- `sequence-paired`: projected and actual calls have the same canonical ATen
+  operator and occurrence ordinal within their respective passes.
+- `actual-only`: a trace-attributed call has no remaining projected call of the
+  same canonical operator.
+- `projected-only`: a MetricCount invocation has no remaining actual call of
+  the same canonical operator.
+
+Metric collection and trace collection are separate passes. Sequence pairing is
+a diagnostic association, not a proof of trace-level identity. The viewer does
+not calculate or display a per-call R for either single-sided state.
 
 ## Interpretation
 

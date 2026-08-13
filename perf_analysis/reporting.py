@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
     from perf_analysis.models import (
         AnalysisResult,
+        CallDataset,
         ComparisonResult,
         OperatorAnalysis,
         OperatorComparison,
@@ -316,6 +317,20 @@ def write_json(result: AnalysisResult, path: Path) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(result.to_dict(), indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def write_calls_json(dataset: CallDataset, path: Path) -> Path:
+    """Write the versioned per-call browser artifact.
+
+    Returns:
+        The output path.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(dataset.to_dict(), indent=2, sort_keys=True, allow_nan=False) + "\n",
         encoding="utf-8",
     )
     return path

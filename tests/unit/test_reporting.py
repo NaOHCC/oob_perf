@@ -11,14 +11,17 @@ import pytest
 
 from test.perf_analysis import (
     AnalysisResult,
+    CallDataset,
+    CallRecord,
+    compare_analyses,
     HardwareSpec,
     LatencyStats,
     OperatorAnalysis,
-    compare_analyses,
     render_comparison_markdown,
     render_comparison_text,
     render_markdown,
     render_text,
+    write_calls_json,
     write_comparison_json,
     write_json,
 )
@@ -62,6 +65,44 @@ def test_all_report_forms_include_efficiency(tmp_path: Path) -> None:
     assert data["efficiency"] == pytest.approx(0.5)
     assert "R = T1/T2 wall: 0.5000" in render_text(result)
     assert "| R = T1 / T2 wall | 0.5000 |" in render_markdown(result)
+
+
+def test_calls_json_preserves_explicit_single_sided_metrics(tmp_path: Path) -> None:
+    """Calls artifacts retain missing metrics instead of manufacturing an R value."""
+    dataset = CallDataset(
+        schema_version=1,
+        workload_name="tiny",
+        device="xpu",
+        actual_source="unitrace",
+        calls=[
+            CallRecord(
+                name="aten::mm",
+                match_status="projected-only",
+                projected_raw_name="aten::mm",
+                actual_raw_name=None,
+                projected_index=3,
+                actual_index=None,
+                external_id=None,
+                projected_ms=1.0,
+                compute_ms=1.0,
+                memory_ms=0.5,
+                flops=10,
+                memory_bytes=20,
+                bound="compute",
+                actual_ms=None,
+                timestamp_us=None,
+                input_dims=None,
+                input_strides=None,
+            ),
+        ],
+    )
+
+    data = json.loads(
+        write_calls_json(dataset, tmp_path / "calls.json").read_text(encoding="utf-8"),
+    )
+
+    assert data["calls"][0]["actual_ms"] is None
+    assert data["calls"][0]["efficiency"] is None
 
 
 def test_comparison_reports_share_speedup_direction_and_sources(

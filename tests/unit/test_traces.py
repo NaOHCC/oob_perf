@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 from perf_analysis import (
+    analyze_collection,
     CollectionArtifacts,
     HardwareSpec,
     InvocationMetrics,
     LatencyStats,
-    TraceAnalysisError,
-    analyze_collection,
     parse_unitrace_ops,
+    TraceAnalysisError,
 )
 
 
@@ -76,6 +76,9 @@ def test_unitrace_kernel_maps_by_order_name_and_external_id(tmp_path: Path) -> N
 
     assert operations[0].name == "aten::mm"
     assert operations[0].gpu_duration_us == 6
+    assert operations[0].timestamp_us == 10
+    assert operations[0].external_id == 7
+    assert operations[0].source_index == 0
 
 
 def test_unitrace_kernel_name_mismatch_is_skipped_and_reported(

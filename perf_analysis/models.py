@@ -10,7 +10,10 @@ from pathlib import Path
 from typing import Any, ClassVar, Literal
 
 SCHEMA_VERSION = 1
+CALLS_SCHEMA_VERSION = 1
 ActualSource = Literal["unitrace", "profiler"]
+CallMatchStatus = Literal["sequence-paired", "actual-only", "projected-only"]
+CallBound = Literal["compute", "memory", "none"]
 
 
 @dataclass(frozen=True)
@@ -110,6 +113,54 @@ class InvocationMetrics:
     def flops(self) -> int:
         """Exact and estimated FLOPs combined."""
         return self.exact_flops + self.estimated_flops
+
+
+@dataclass(frozen=True)
+class CallRecord:
+    """Projected and measured metrics for one operator-local call."""
+
+    name: str
+    match_status: CallMatchStatus
+    projected_raw_name: str | None
+    actual_raw_name: str | None
+    projected_index: int | None
+    actual_index: int | None
+    external_id: int | None
+    projected_ms: float | None
+    compute_ms: float | None
+    memory_ms: float | None
+    flops: int | None
+    memory_bytes: int | None
+    bound: CallBound | None
+    actual_ms: float | None
+    timestamp_us: float | None
+    input_dims: str | None
+    input_strides: str | None
+
+    @property
+    def efficiency(self) -> float | None:
+        """Per-call roofline efficiency for paired records."""
+        if self.projected_ms is None or self.actual_ms is None or self.actual_ms <= 0:
+            return None
+        return self.projected_ms / self.actual_ms
+
+
+@dataclass(frozen=True)
+class CallDataset:
+    """Versioned browser artifact containing all projected and measured calls."""
+
+    schema_version: int
+    workload_name: str
+    device: str
+    actual_source: ActualSource
+    calls: list[CallRecord]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return a JSON-compatible dataset with derived efficiencies."""
+        data = asdict(self)
+        for call_data, call in zip(data["calls"], self.calls, strict=True):
+            call_data["efficiency"] = call.efficiency
+        return data
 
 
 @dataclass(frozen=True)

@@ -10,18 +10,21 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from perf_analysis.models import (
-    SCHEMA_VERSION,
     ActualSource,
     AnalysisResult,
+    CallDataset,
+    CallRecord,
+    CALLS_SCHEMA_VERSION,
     CollectionArtifacts,
     OperatorAnalysis,
+    SCHEMA_VERSION,
 )
 from perf_analysis.traces import (
     ActualOp,
-    TraceAnalysisError,
     normalize_op_name,
     parse_profiler_ops,
     parse_unitrace_ops,
+    TraceAnalysisError,
 )
 
 _VECTOR_ENGINE_OPS = frozenset(
@@ -50,6 +53,19 @@ class _ActualAggregate:
     duration_us: float = 0.0
     calls: int = 0
     shape_times: dict[tuple[str, str], float] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class _ProjectedCall:
+    name: str
+    raw_name: str
+    source_index: int
+    projected_ms: float
+    compute_ms: float
+    memory_ms: float
+    flops: int
+    memory_bytes: int
+    bound: str
 
 
 def load_collection(path: Path) -> CollectionArtifacts:
@@ -89,12 +105,10 @@ def _resolve_unitrace_path(
     return matches[0]
 
 
-def _project_ops(
-    collection: CollectionArtifacts,
-) -> dict[str, _ProjectedAggregate]:
-    projected: dict[str, _ProjectedAggregate] = {}
+def _project_calls(collection: CollectionArtifacts) -> list[_ProjectedCall]:
+    calls = []
     hardware = collection.hardware
-    for invocation in collection.invocations:
+    for source_index, invocation in enumerate(collection.invocations):
         name = normalize_op_name(invocation.name)
         if name in _EXCLUDED_OPS:
             continue
@@ -102,16 +116,46 @@ def _project_ops(
         compute_ms = projection_flops / hardware.peak_flops_per_second * 1000
         memory_ms = invocation.memory_bytes / hardware.memory_bytes_per_second * 1000
         projected_ms = max(compute_ms, memory_ms)
-        aggregate = projected.setdefault(name, _ProjectedAggregate())
-        aggregate.projected_ms += projected_ms
-        aggregate.flops += invocation.flops
-        aggregate.memory_bytes += invocation.memory_bytes
+        bound = "none"
+        if projected_ms > 0:
+            bound = "compute" if compute_ms >= memory_ms else "memory"
+        calls.append(
+            _ProjectedCall(
+                name=name,
+                raw_name=invocation.name,
+                source_index=source_index,
+                projected_ms=projected_ms,
+                compute_ms=compute_ms,
+                memory_ms=memory_ms,
+                flops=invocation.flops,
+                memory_bytes=invocation.memory_bytes,
+                bound=bound,
+            ),
+        )
+    return calls
+
+
+def _aggregate_projected(
+    calls: list[_ProjectedCall],
+) -> dict[str, _ProjectedAggregate]:
+    projected: dict[str, _ProjectedAggregate] = {}
+    for call in calls:
+        aggregate = projected.setdefault(call.name, _ProjectedAggregate())
+        aggregate.projected_ms += call.projected_ms
+        aggregate.flops += call.flops
+        aggregate.memory_bytes += call.memory_bytes
         aggregate.calls += 1
-        if projected_ms > 0 and compute_ms >= memory_ms:
+        if call.bound == "compute":
             aggregate.compute_bound_calls += 1
-        elif projected_ms > 0:
+        elif call.bound == "memory":
             aggregate.memory_bound_calls += 1
     return projected
+
+
+def _project_ops(
+    collection: CollectionArtifacts,
+) -> dict[str, _ProjectedAggregate]:
+    return _aggregate_projected(_project_calls(collection))
 
 
 def _aggregate_actual(operations: list[ActualOp]) -> dict[str, _ActualAggregate]:
@@ -127,6 +171,71 @@ def _aggregate_actual(operations: list[ActualOp]) -> dict[str, _ActualAggregate]
             aggregate.shape_times.get(shape, 0.0) + operation.gpu_duration_us
         )
     return actual
+
+
+def _calls_dataset(
+    collection: CollectionArtifacts,
+    actual_source: ActualSource,
+    projected_calls: list[_ProjectedCall],
+    actual_operations: list[ActualOp],
+) -> CallDataset:
+    projected_by_name: dict[str, list[_ProjectedCall]] = {}
+    for call in projected_calls:
+        projected_by_name.setdefault(call.name, []).append(call)
+
+    actual_by_name: dict[str, list[ActualOp]] = {}
+    for operation in actual_operations:
+        if operation.name not in _EXCLUDED_OPS:
+            actual_by_name.setdefault(operation.name, []).append(operation)
+
+    records = []
+    for name in sorted(projected_by_name.keys() | actual_by_name.keys()):
+        projections = projected_by_name.get(name, [])
+        actuals = actual_by_name.get(name, [])
+        for ordinal in range(max(len(projections), len(actuals))):
+            projection = projections[ordinal] if ordinal < len(projections) else None
+            actual = actuals[ordinal] if ordinal < len(actuals) else None
+            match_status = (
+                "sequence-paired"
+                if projection is not None and actual is not None
+                else "projected-only" if projection is not None else "actual-only"
+            )
+            records.append(
+                CallRecord(
+                    name=name,
+                    match_status=match_status,
+                    projected_raw_name=(
+                        None if projection is None else projection.raw_name
+                    ),
+                    actual_raw_name=None if actual is None else actual.raw_name,
+                    projected_index=(
+                        None if projection is None else projection.source_index
+                    ),
+                    actual_index=None if actual is None else actual.source_index,
+                    external_id=None if actual is None else actual.external_id,
+                    projected_ms=(
+                        None if projection is None else projection.projected_ms
+                    ),
+                    compute_ms=None if projection is None else projection.compute_ms,
+                    memory_ms=None if projection is None else projection.memory_ms,
+                    flops=None if projection is None else projection.flops,
+                    memory_bytes=(
+                        None if projection is None else projection.memory_bytes
+                    ),
+                    bound=None if projection is None else projection.bound,
+                    actual_ms=None if actual is None else actual.gpu_duration_us / 1000,
+                    timestamp_us=None if actual is None else actual.timestamp_us,
+                    input_dims=None if actual is None else actual.input_dims,
+                    input_strides=None if actual is None else actual.input_strides,
+                ),
+            )
+    return CallDataset(
+        schema_version=CALLS_SCHEMA_VERSION,
+        workload_name=collection.workload_name,
+        device=collection.device,
+        actual_source=actual_source,
+        calls=records,
+    )
 
 
 def _operator_results(
@@ -168,12 +277,12 @@ def _operator_results(
     )
 
 
-def analyze_collection(
+def analyze_collection_artifacts(
     collection: CollectionArtifacts | Path,
     *,
     unitrace_path: Path | None = None,
     allow_profiler_fallback: bool = False,
-) -> AnalysisResult:
+) -> tuple[AnalysisResult, CallDataset]:
     """Analyze one collection after its unitrace-wrapped process exits.
 
     Args:
@@ -184,7 +293,7 @@ def analyze_collection(
             missing or cannot be mapped strictly.
 
     Returns:
-        Structured end-to-end and per-operator roofline results.
+        Aggregate roofline results and a per-call browser artifact.
 
     Raises:
         TraceAnalysisError: If strict unitrace analysis cannot be completed.
@@ -217,12 +326,13 @@ def analyze_collection(
             diagnostics.append(f"unitrace fallback: {error}")
             actual_operations = parse_profiler_ops(manifest.trace_path)
 
-    projected = _project_ops(manifest)
+    projected_calls = _project_calls(manifest)
+    projected = _aggregate_projected(projected_calls)
     actual = _aggregate_actual(actual_operations)
     operators = _operator_results(projected, actual)
     t1_ms = sum(item.projected_ms for item in projected.values())
     device_duration_ms = sum(item.duration_us for item in actual.values()) / 1000
-    return AnalysisResult(
+    result = AnalysisResult(
         schema_version=SCHEMA_VERSION,
         workload_name=manifest.workload_name,
         device=manifest.device,
@@ -236,3 +346,27 @@ def analyze_collection(
         operators=operators,
         diagnostics=diagnostics,
     )
+    return result, _calls_dataset(
+        manifest,
+        actual_source,
+        projected_calls,
+        actual_operations,
+    )
+
+
+def analyze_collection(
+    collection: CollectionArtifacts | Path,
+    *,
+    unitrace_path: Path | None = None,
+    allow_profiler_fallback: bool = False,
+) -> AnalysisResult:
+    """Analyze one collection while preserving the aggregate API.
+
+    Returns:
+        Structured end-to-end and per-operator roofline results.
+    """
+    return analyze_collection_artifacts(
+        collection,
+        unitrace_path=unitrace_path,
+        allow_profiler_fallback=allow_profiler_fallback,
+    )[0]

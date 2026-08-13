@@ -11,6 +11,8 @@ import pytest
 import torch
 
 from test.perf_analysis import (
+    analyze_collection,
+    analyze_collection_artifacts,
     CollectionArtifacts,
     CollectionConfig,
     HardwareSpec,
@@ -18,7 +20,6 @@ from test.perf_analysis import (
     LatencyStats,
     MetricCount,
     TraceAnalysisError,
-    analyze_collection,
 )
 
 
@@ -63,6 +64,76 @@ def test_projection_sums_per_invocation_bounds(tmp_path: Path) -> None:
     assert result.t1_ms == pytest.approx(2.0)
     assert result.efficiency == pytest.approx(2.0 / 3.0)
     assert result.actual_source == "profiler"
+
+
+def test_calls_artifact_preserves_unpaired_projected_invocations(
+    tmp_path: Path,
+) -> None:
+    """Calls are paired per canonical operator without dropping unmatched tails."""
+    trace_path = tmp_path / "trace.json"
+    trace_path.write_text(
+        json.dumps(
+            {
+                "traceEvents": [
+                    {
+                        "ph": "X",
+                        "cat": "cpu_op",
+                        "name": "aten::linear",
+                        "ts": 10,
+                        "dur": 5,
+                        "args": {
+                            "External id": 7,
+                            "Input Dims": "[[2,3],[3,4]]",
+                            "Input Strides": "[[3,1],[4,1]]",
+                        },
+                    },
+                    {
+                        "ph": "X",
+                        "cat": "kernel",
+                        "name": "gemm_kernel",
+                        "ts": 12,
+                        "dur": 2_000,
+                        "args": {"External id": 7},
+                    },
+                ],
+            },
+        ),
+        encoding="utf-8",
+    )
+    collection = CollectionArtifacts(
+        schema_version=1,
+        workload_name="unpaired",
+        pid=1,
+        device="cuda",
+        hardware=HardwareSpec("synthetic", 1.0, 1.0),
+        latency=LatencyStats([3.0], 3.0, 3.0, 3.0, 3.0),
+        invocations=[
+            InvocationMetrics("aten::addmm", 1_000_000_000, 0, 0, 1),
+            InvocationMetrics("aten::addmm", 1_000_000_000, 0, 0, 1),
+        ],
+        totals={"flops": 2_000_000_000, "memory_bytes": 2},
+        unaccounted_flop_ops={},
+        trace_path=trace_path,
+        unitrace_glob=str(tmp_path / "missing.*.json"),
+        actual_source_preference="profiler",
+    )
+
+    result, dataset = analyze_collection_artifacts(collection)
+    calls = [call for call in dataset.calls if call.name == "aten::addmm"]
+
+    assert result.operators[0].projected_calls == len(calls)
+    assert result.operators[0].actual_calls == sum(
+        call.match_status == "sequence-paired" for call in calls
+    )
+    assert [call.match_status for call in calls] == [
+        "sequence-paired",
+        "projected-only",
+    ]
+    assert calls[0].actual_raw_name == "aten::linear"
+    assert calls[0].actual_ms == pytest.approx(2.0)
+    assert calls[0].efficiency == pytest.approx(0.5)
+    assert calls[1].actual_ms is None
+    assert calls[1].efficiency is None
 
 
 def test_unitrace_is_strict_by_default(tmp_path: Path) -> None:
